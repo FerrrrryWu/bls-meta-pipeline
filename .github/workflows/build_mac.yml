@@ -1,0 +1,48 @@
+name: Build macOS App
+
+on:
+  workflow_dispatch:
+  push:
+    branches: [main]
+    paths:
+      - 'bls_meta/**.py'
+      - 'bls_meta/**.spec'
+      - '.github/workflows/build_mac.yml'
+
+jobs:
+  build-macos:
+    runs-on: macos-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install pyinstaller pandas numpy scipy scikit-learn statsmodels matplotlib pillow pyyaml openpyxl
+
+      - name: Build macOS app
+        run: |
+          cd bls_meta
+          pyinstaller BLS_Meta_Pipeline_mac.spec --noconfirm
+          ls -lh dist/
+
+      - name: Zip .app bundle
+        run: |
+          cd bls_meta/dist
+          zip -r ../../BLS_Meta_Pipeline_mac.zip BLS_Meta_Pipeline.app
+
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLS_Meta_Pipeline_mac
+          path: BLS_Meta_Pipeline_mac.zip
+          retention-days: 7
