@@ -1,0 +1,26 @@
+# Build outputs
+dist/
+build/
+__pycache__/
+*.pyc
+*.pyo
+venv_mac/
+
+# Config with API keys
+config.yaml
+
+# Data files (too large / sensitive)
+*.csv
+*.parquet
+*.xlsx
+*.xls
+
+# Logs
+build_log.txt
+*.log
+
+# macOS
+.DS_Store
+
+# PyInstaller
+*.spec.bak

@@ -1,0 +1,66 @@
+name: Build macOS App
+
+on:
+  workflow_dispatch:          # 手动触发：GitHub → Actions → Run workflow
+  push:
+    branches: [main]
+    paths:
+      - '**.py'
+      - '**.spec'
+      - '.github/workflows/build_mac.yml'
+
+jobs:
+  build-macos:
+    runs-on: macos-latest     # GitHub 免费 macOS runner (Apple Silicon)
+    timeout-minutes: 30
+
+    steps:
+      # ── 1. Checkout ──────────────────────────────────────────────────────────
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      # ── 2. Set up Python 3.12 ────────────────────────────────────────────────
+      - name: Set up Python 3.12
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      # ── 3. Install dependencies ───────────────────────────────────────────────
+      - name: Install dependencies
+        run: |
+          pip install --upgrade pip
+          pip install \
+            pyinstaller \
+            pandas \
+            numpy \
+            scipy \
+            scikit-learn \
+            statsmodels \
+            matplotlib \
+            pillow \
+            pyyaml \
+            openpyxl
+
+      # ── 4. Build .app with PyInstaller ────────────────────────────────────────
+      - name: Build macOS app
+        run: |
+          pyinstaller BLS_Meta_Pipeline_mac.spec --noconfirm
+          echo "Build complete. Listing dist/:"
+          ls -lh dist/
+
+      # ── 5. Zip the .app for download ──────────────────────────────────────────
+      - name: Zip .app bundle
+        run: |
+          cd dist
+          zip -r ../BLS_Meta_Pipeline_mac.zip BLS_Meta_Pipeline.app
+          cd ..
+          echo "Zip size: $(du -sh BLS_Meta_Pipeline_mac.zip | cut -f1)"
+
+      # ── 6. Upload artifact (downloadable for 7 days) ──────────────────────────
+      - name: Upload artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: BLS_Meta_Pipeline_mac
+          path: BLS_Meta_Pipeline_mac.zip
+          retention-days: 7
