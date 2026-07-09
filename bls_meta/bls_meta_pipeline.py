@@ -62,7 +62,7 @@ DEFAULT_ALPHA        = _ANA.get("alpha",        0.10)
 DEFAULT_MIN_N        = _ANA.get("min_n",        5)
 DEFAULT_WEIGHT_COL   = _ANA.get("weight_col",   "iv_weight")
 DEFAULT_QUESTION_TAGS = _ANA.get("question_tags",
-                                  ["AD_RECALL", "AWARENESS", "FAVORABILITY", "INTENT"])
+                                  ["AD_RECALL", "AWARENESS", "INTENT"])
 MT_CORRECTION         = _ANA.get("mt_correction", "none")  # none | bh | bonferroni | holm
 
 WINSORIZE_LO  = _PRE.get("winsorize_lower", 0.02)
@@ -251,7 +251,7 @@ DOMAIN_PRIORS = {
             "1-2%":   "Below-median completion; limited brand metric movement.",
             "2-3.5%": "Mid-range completion; typical benchmark for standard TikTok creatives.",
             ">3.5%":  "High completion. RF importance=0.163 (rank #2). "
-                      "Consistently stronger Brand Awareness and Favorability lift.",
+                      "Consistently stronger Brand Awareness and Intent lift.",
         },
         "min_meaningful_delta_pp": 2.0,
         "reference_sigma": 4.1,
@@ -308,7 +308,7 @@ DOMAIN_PRIORS = {
             "Low":  "Bottom tertile (<P33). May not reach recall threshold.",
             "Mid":  "P33-P67. Standard campaign cadence; reasonable baseline.",
             "High": "Top tertile (>P67). Ad-fatigue risk; may inflate ad-recall "
-                    "while depressing favorability lift.",
+                    "while showing diminishing returns on brand metric lift.",
         },
         "min_meaningful_delta_pp": 1.5,
         "reference_sigma": 3.4,
@@ -796,6 +796,12 @@ def sig_heatmap(all_results, question_tag_filter="All Questions", alpha=0.10):
             except Exception:
                 pass
 
+    # Sort columns by mean lift descending (high → low, bar-chart-like left→right)
+    col_order = pivot.mean(axis=0).sort_values(ascending=False).index
+    pivot     = pivot[col_order]
+    sig_p     = sig_p.reindex(columns=col_order)
+    annot     = annot.reindex(columns=col_order)
+
     fig, ax = plt.subplots(figsize=(max(14, len(pivot.columns) * 1.3),
                                      max(4, len(pivot.index) * 0.9)))
     sns.heatmap(pivot, annot=annot, fmt="", cmap="RdYlGn", center=0, ax=ax,
@@ -986,11 +992,12 @@ class BLSMetaPipeline:
         self._fi_result        = None    # stored after feature_importance()
         self._last_report_path = None    # stored after generate_report()
         # Runtime flags — overrideable by launch_ui() / _apply_config()
-        self._fi_enabled = FI_ENABLED
-        self._cc_enabled = CC_ENABLED
-        self._cc_pairs   = [list(p) for p in CC_DEFAULT_PAIRS]
-        self._out_cfg    = dict(_OUT_YAML)
-        self._report_cfg = {"enabled": True, "ai_api_key": "", "ai_model": "gpt-4o-mini"}
+        self._fi_enabled      = FI_ENABLED
+        self._cc_enabled      = CC_ENABLED
+        self._cc_pairs        = [list(p) for p in CC_DEFAULT_PAIRS]
+        self._out_cfg         = dict(_OUT_YAML)
+        self._report_cfg      = {"enabled": True, "ai_api_key": "", "ai_model": "gpt-4o-mini"}
+        self._advertiser_cfg  = {}   # advertiser ID filter (enabled, ids, id_column)
 
     # ── Configuration ─────────────────────────────────────────────────────────
     def configure(self, **kwargs):
@@ -1041,6 +1048,10 @@ class BLSMetaPipeline:
         out = cfg.get("output", {})
         self._out_cfg = {**self._out_cfg, **out}
 
+        adv = cfg.get("advertiser_filter", {})
+        if adv:
+            self._advertiser_cfg = dict(adv)
+
         for ccut in cfg.get("custom_cuts", []):
             try:
                 self._register_custom_cut(ccut)
@@ -1090,6 +1101,26 @@ class BLSMetaPipeline:
 
         if name in self._cuts:
             self._cuts[name]["enabled"] = enabled
+
+    def _apply_advertiser_filter(self):
+        """
+        Filter internal DataFrames to only rows matching the configured
+        advertiser IDs.  No-op when disabled or IDs list is empty.
+        Call at the start of full_run() so every analysis uses the same subset.
+        """
+        adv = self._advertiser_cfg
+        if not adv.get("enabled", False):
+            return
+        ids = [str(i).strip() for i in adv.get("ids", []) if str(i).strip()]
+        if not ids:
+            return
+        id_col = adv.get("id_column", "advertiser_id")
+        for attr in ("_df", "_df_prod", "_df_obj"):
+            df = getattr(self, attr)
+            if id_col in df.columns:
+                setattr(self, attr,
+                        df[df[id_col].astype(str).isin(ids)].reset_index(drop=True))
+        print(f"  [Filter] Advertiser filter: {len(ids)} ID(s) → {len(self._df):,} rows remaining")
 
     def set_metrics(self, lst):
         """Replace question_tags list."""
@@ -1590,16 +1621,22 @@ class BLSMetaPipeline:
         run_all → all_heatmaps → all_cross_heatmaps → feature_importance → recommend → export
         Respects per-instance flags set by _apply_config() / launch_ui().
         """
+        # Apply advertiser filter before any analysis
+        self._apply_advertiser_filter()
+
         self.run_all(strict=strict)
+
+        # Clean up stale PNGs from previous runs so report only shows current-run charts
+        import glob as _glob
+        for _pattern in ("Heatmap_*.png", "Pipeline_F*.png", "cross_*.png"):
+            for _old in _glob.glob(os.path.join(OUT, _pattern)):
+                try:
+                    os.remove(_old)
+                except Exception:
+                    pass
+
         self.all_heatmaps()
         _pairs = cross_pairs or (self._cc_pairs if self._cc_enabled else [])
-        # Clean up stale cross-cut PNGs from previous runs before generating new ones
-        import glob as _glob
-        for _old in _glob.glob(os.path.join(OUT, "cross_*.png")):
-            try:
-                os.remove(_old)
-            except Exception:
-                pass
         if _pairs:
             self.all_cross_heatmaps(_pairs)
         self.feature_importance()   # stores to self._fi_result

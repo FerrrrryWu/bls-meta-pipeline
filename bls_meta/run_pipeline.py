@@ -33,7 +33,7 @@ _DEFAULT_CFG = {
     "analysis": {
         "alpha": 0.10, "min_n": 5,
         "weight_col": "iv_weight",
-        "question_tags": ["AD_RECALL", "AWARENESS", "FAVORABILITY", "INTENT"],
+        "question_tags": ["AD_RECALL", "AWARENESS", "INTENT"],
         "mt_correction": "none",
     },
     "preprocessing": {"winsorize_lower": 0.02, "winsorize_upper": 0.98, "freq_p99_cap": True},
@@ -55,6 +55,7 @@ _DEFAULT_CFG = {
         "ai_api_key": "",
         "ai_model": "gemini-2.0-flash",
     },
+    "advertiser_filter": {"enabled": False, "ids": [], "id_column": "advertiser_id"},
 }
 
 def _load_cfg() -> dict:
@@ -76,7 +77,7 @@ ALL_CUTS = [
     "Frequency", "Weekly Impressions", "Objective", "Product Split",
     "Account Segment", "Audience Type", "Billing Type", "Spark Ads", "ACO",
 ]
-ALL_QUESTION_TAGS = ["AD_RECALL", "AWARENESS", "FAVORABILITY", "INTENT"]
+ALL_QUESTION_TAGS = ["AD_RECALL", "AWARENESS", "INTENT"]
 ALPHA_OPTIONS     = [0.01, 0.05, 0.10]
 WEIGHT_OPTIONS    = ["iv_weight", "n_weight"]
 DPI_OPTIONS       = [100, 150, 200, 300]
@@ -241,6 +242,30 @@ def build_app(root: tk.Tk) -> None:
     v_freq_cap = tk.BooleanVar(value=pre.get("freq_p99_cap", True))
     ttk.Checkbutton(f1, text="Cap frequency at P99 before binning",
                     variable=v_freq_cap).grid(row=r, column=0, columnspan=3, sticky="w", padx=8, pady=3)
+    r += 1
+
+    # -- Advertiser Filter ---------------------------------------------------
+    ttk.Separator(f1, orient="horizontal").grid(
+        row=r, columnspan=4, sticky="ew", padx=8, pady=6); r += 1
+    heading(f1, "Advertiser Filter", r); r += 1
+
+    adv_f = cfg.get("advertiser_filter", {})
+    v_adv_en = tk.BooleanVar(value=adv_f.get("enabled", False))
+    ttk.Checkbutton(
+        f1, text="Filter by Advertiser IDs  (unchecked = all advertisers)",
+        variable=v_adv_en,
+    ).grid(row=r, column=0, columnspan=3, sticky="w", padx=8, pady=3); r += 1
+
+    ttk.Label(f1, text="Advertiser IDs:").grid(row=r, column=0, sticky="nw", padx=8, pady=3)
+    adv_text = tk.Text(f1, height=3, width=50)
+    adv_text.insert("1.0", ", ".join(str(i) for i in adv_f.get("ids", [])))
+    adv_text.grid(row=r, column=1, columnspan=2, sticky="w", padx=4, pady=3)
+    hint(f1, "comma-separated advertiser IDs; leave empty for all", r); r += 1
+
+    ttk.Label(f1, text="ID column:").grid(row=r, column=0, sticky="w", padx=8, pady=3)
+    v_adv_col = tk.StringVar(value=adv_f.get("id_column", "advertiser_id"))
+    ttk.Entry(f1, textvariable=v_adv_col, width=25).grid(row=r, column=1, sticky="w", padx=4)
+    hint(f1, "CSV column name containing advertiser/account IDs", r); r += 1
 
     # --- TAB 2: Cuts ----------------------------------------------------------
     tab2 = ttk.Frame(nb);  nb.add(tab2, text="[3] Cuts")
@@ -744,6 +769,12 @@ def build_app(root: tk.Tk) -> None:
         # Empty string = use built-in key; actual key = use custom
         c["report"]["ai_api_key"] = "" if v_key_mode.get() == "builtin" else v_ai_key.get().strip()
         c["report"]["ai_model"]   = v_ai_model.get()
+        c.setdefault("advertiser_filter", {})
+        c["advertiser_filter"]["enabled"]   = v_adv_en.get()
+        c["advertiser_filter"]["ids"]       = [
+            x.strip() for x in adv_text.get("1.0", "end").split(",") if x.strip()
+        ]
+        c["advertiser_filter"]["id_column"] = v_adv_col.get()
         return c
 
     # -- Progress window + background run -------------------------------------

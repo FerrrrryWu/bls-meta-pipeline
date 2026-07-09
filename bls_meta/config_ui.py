@@ -34,7 +34,7 @@ ALL_CUTS = [
     "Frequency", "Weekly Impressions", "Objective", "Product Split",
     "Account Segment", "Audience Type", "Billing Type", "Spark Ads", "ACO",
 ]
-ALL_QUESTION_TAGS = ["AD_RECALL", "AWARENESS", "FAVORABILITY", "INTENT"]
+ALL_QUESTION_TAGS = ["AD_RECALL", "AWARENESS", "INTENT"]
 ALPHA_OPTIONS         = [0.01, 0.05, 0.10]
 WEIGHT_OPTIONS        = ["iv_weight", "n_weight"]
 DPI_OPTIONS           = [100, 150, 200, 300]
@@ -113,12 +113,13 @@ def _notebook_ui(cfg: dict, config_path: str, on_run) -> dict:
 
     result = {"config": copy.deepcopy(cfg)}
 
-    ana  = cfg.get("analysis",           {})
-    pre  = cfg.get("preprocessing",      {})
-    cuts = cfg.get("cuts",               {})
-    cc   = cfg.get("cross_cuts",         {})
-    fi   = cfg.get("feature_importance", {})
-    out  = cfg.get("output",             {})
+    ana        = cfg.get("analysis",           {})
+    pre        = cfg.get("preprocessing",      {})
+    cuts       = cfg.get("cuts",               {})
+    cc         = cfg.get("cross_cuts",         {})
+    fi         = cfg.get("feature_importance", {})
+    out        = cfg.get("output",             {})
+    adv_filter = cfg.get("advertiser_filter",  {})
 
     # ── Layout helpers ────────────────────────────────────────────────────────
     W = w.Layout
@@ -175,6 +176,24 @@ def _notebook_ui(cfg: dict, config_path: str, on_run) -> dict:
         description="Cap frequency at P99 before binning",
     )
 
+    # ── Advertiser Filter widgets ──────────────────────────────────────────
+    w_adv_en = w.Checkbox(
+        value=adv_filter.get("enabled", False),
+        description="Filter by Advertiser IDs  (unchecked = all advertisers)",
+        layout=W(width="500px"),
+    )
+    w_adv_ids = w.Textarea(
+        value=", ".join(str(i) for i in adv_filter.get("ids", [])),
+        placeholder="Enter comma-separated advertiser IDs, e.g.: 123456, 789012",
+        layout=W(width="500px", height="70px"),
+    )
+    w_adv_col = w.Text(
+        value=adv_filter.get("id_column", "advertiser_id"),
+        description="ID column:",
+        style=lbl_style,
+        layout=W(width="340px"),
+    )
+
     tab1 = w.VBox([
         section("⚙️ Analysis"),
         row(w_alpha,    hint("0.01 strict | 0.05 standard | 0.10 lenient")),
@@ -188,6 +207,12 @@ def _notebook_ui(cfg: dict, config_path: str, on_run) -> dict:
         row(w_wlo, hint("lower lift clip percentile  (0.01–0.05)")),
         row(w_whi, hint("upper lift clip percentile  (0.95–0.99)")),
         w_freq_cap,
+        section("🔍 Advertiser Filter"),
+        w_adv_en,
+        row(w_adv_col, hint("column name in your CSV that holds advertiser / account IDs")),
+        w.HTML("<b>Advertiser IDs</b>&nbsp;<small style='color:#888'>"
+               "comma-separated; leave empty for all</small>"),
+        w_adv_ids,
     ], layout=W(padding="12px"))
 
     # ── Tab 2: Cuts ──────────────────────────────────────────────────────────
@@ -347,6 +372,13 @@ def _notebook_ui(cfg: dict, config_path: str, on_run) -> dict:
         c["output"]["save_figures"] = w_save_figs.value
         c["output"]["export_csv"]   = w_export_csv.value
         c["output"]["export_excel"] = w_export_xl.value
+
+        c.setdefault("advertiser_filter", {})
+        c["advertiser_filter"]["enabled"]   = w_adv_en.value
+        c["advertiser_filter"]["ids"]       = [
+            x.strip() for x in w_adv_ids.value.split(",") if x.strip()
+        ]
+        c["advertiser_filter"]["id_column"] = w_adv_col.value
         return c
 
     # ── Buttons ───────────────────────────────────────────────────────────────
@@ -408,12 +440,13 @@ def _tkinter_ui(cfg: dict, config_path: str, on_run) -> dict:
 
     result = {"config": copy.deepcopy(cfg), "ok": False}
 
-    ana      = cfg.get("analysis",           {})
-    pre      = cfg.get("preprocessing",      {})
-    cuts_cfg = cfg.get("cuts",               {})
-    cc       = cfg.get("cross_cuts",         {})
-    fi       = cfg.get("feature_importance", {})
-    out      = cfg.get("output",             {})
+    ana        = cfg.get("analysis",           {})
+    pre        = cfg.get("preprocessing",      {})
+    cuts_cfg   = cfg.get("cuts",               {})
+    cc         = cfg.get("cross_cuts",         {})
+    fi         = cfg.get("feature_importance", {})
+    out        = cfg.get("output",             {})
+    adv_filter = cfg.get("advertiser_filter",  {})
 
     # ── Root window ───────────────────────────────────────────────────────────
     root = tk.Tk()
@@ -541,6 +574,28 @@ def _tkinter_ui(cfg: dict, config_path: str, on_run) -> dict:
     ttk.Checkbutton(f1, text="Cap frequency at P99 before binning",
                     variable=v_freq_cap).grid(
         row=r, column=0, columnspan=3, sticky="w", padx=8, pady=3); r += 1
+
+    # ── Advertiser Filter ────────────────────────────────────────────────
+    ttk.Separator(f1, orient="horizontal").grid(
+        row=r, columnspan=4, sticky="ew", padx=8, pady=6); r += 1
+    heading(f1, "🔍 Advertiser Filter", r); r += 1
+
+    v_adv_en = tk.BooleanVar(value=adv_filter.get("enabled", False))
+    ttk.Checkbutton(
+        f1, text="Filter by Advertiser IDs  (unchecked = all advertisers)",
+        variable=v_adv_en,
+    ).grid(row=r, column=0, columnspan=3, sticky="w", padx=8, pady=3); r += 1
+
+    ttk.Label(f1, text="Advertiser IDs:").grid(row=r, column=0, sticky="nw", padx=8, pady=3)
+    adv_text = tk.Text(f1, height=3, width=50)
+    adv_text.insert("1.0", ", ".join(str(i) for i in adv_filter.get("ids", [])))
+    adv_text.grid(row=r, column=1, columnspan=2, sticky="w", padx=4, pady=3)
+    hint(f1, "comma-separated advertiser IDs; leave empty for all", r); r += 1
+
+    ttk.Label(f1, text="ID column:").grid(row=r, column=0, sticky="w", padx=8, pady=3)
+    v_adv_col = tk.StringVar(value=adv_filter.get("id_column", "advertiser_id"))
+    ttk.Entry(f1, textvariable=v_adv_col, width=25).grid(row=r, column=1, sticky="w", padx=4)
+    hint(f1, "CSV column name containing advertiser/account IDs", r); r += 1
 
     # ─── TAB 2: Cuts ─────────────────────────────────────────────────────────
     tab2 = ttk.Frame(nb);  nb.add(tab2, text="✂️ Cuts")
@@ -711,6 +766,13 @@ def _tkinter_ui(cfg: dict, config_path: str, on_run) -> dict:
         c["output"]["save_figures"] = v_save_figs.get()
         c["output"]["export_csv"]   = v_export_csv.get()
         c["output"]["export_excel"] = v_export_xl.get()
+
+        c.setdefault("advertiser_filter", {})
+        c["advertiser_filter"]["enabled"]   = v_adv_en.get()
+        c["advertiser_filter"]["ids"]       = [
+            x.strip() for x in adv_text.get("1.0", "end").split(",") if x.strip()
+        ]
+        c["advertiser_filter"]["id_column"] = v_adv_col.get()
         return c
 
     # ─── Bottom buttons ───────────────────────────────────────────────────────

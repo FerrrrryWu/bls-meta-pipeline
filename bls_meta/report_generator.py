@@ -431,6 +431,59 @@ def _build_per_cut_prompt(results: dict, config: dict) -> str:
     return "\n".join(lines)
 
 
+def _build_heatmap_prompt(results: dict, config: dict) -> str:
+    """
+    Build a prompt asking the AI to interpret the summary heatmap data:
+    what it shows, key patterns, top performers, and actionable insights.
+    """
+    alpha       = config.get("alpha", 0.10)
+    sel_tags    = config.get("question_tags", [])
+
+    rows_by_cut: dict = {}
+    for cut_name, res_df in results.items():
+        if res_df is None or len(res_df) == 0:
+            continue
+        cut_rows = []
+        for tag in sel_tags:
+            if "question_tag" in res_df.columns:
+                df_f = res_df[res_df["question_tag"] == tag]
+            else:
+                df_f = res_df
+            for _, row in df_f.iterrows():
+                lift = float(row.get("weighted_mean_lift", float("nan")))
+                sig  = "*" if str(row.get("sig_vs_zero", "")) == "✓" else ""
+                cut_rows.append(
+                    f"  [{tag}] {row.get('group','?')}: {lift:+.3f}pp{sig}"
+                )
+        if cut_rows:
+            rows_by_cut[cut_name] = cut_rows
+
+    if not rows_by_cut:
+        return ""
+
+    data_lines = []
+    for cut_name, rows in rows_by_cut.items():
+        data_lines.append(f"\n### {cut_name}")
+        data_lines.extend(rows)
+
+    prompt = (
+        "You are a senior marketing data scientist interpreting a TikTok Brand Lift Study "
+        "meta-analysis heatmap.\n"
+        f"Statistical threshold: \u03b1={alpha}. Lift values are weighted mean absolute "
+        "percentage-point change in survey metrics (* = statistically significant vs 0).\n"
+        "The heatmap rows are question tags, columns are cut groups (e.g. Watch Time buckets, "
+        "VCR buckets, etc.), values are weighted mean lift.\n\n"
+        "Data:\n" + "\n".join(data_lines) + "\n\n"
+        "Please provide a concise HTML analysis (\u2264180 words total) covering:\n"
+        "1. What this heatmap shows (1-2 sentences explaining rows/columns/values).\n"
+        "2. Top-performing cut groups (highest lift, especially if significant).\n"
+        "3. Cross-tag patterns (e.g. a group that wins across all metrics).\n"
+        "4. Practical implication for campaign optimization (2-3 bullet points).\n"
+        "Format: HTML paragraphs and a \u003cul\u003e list for bullet points. No markdown."
+    )
+    return prompt
+
+
 def _read_http_error(e) -> str:
     """Extract meaningful message from urllib HTTPError response body."""
     import json as _j
@@ -813,6 +866,15 @@ def generate_report(
             except Exception:
                 pass  # per-cut summaries are best-effort; silently skip on failure
 
+        # -- Heatmap interpretation (third AI call) -------------------------------------------
+        heatmap_ai_html = ""
+        try:
+            hm_prompt = _build_heatmap_prompt(results, config)
+            if hm_prompt:
+                heatmap_ai_html = _call_ai(hm_prompt, key_raw, ai_model)
+        except Exception:
+            pass  # heatmap interpretation is best-effort
+
     if ai_result is not None:
         is_builtin = bool(_BUILTIN_AI_KEY and key_raw == _BUILTIN_AI_KEY)
         suffix   = " (Gemini Flash)" if is_builtin else ""
@@ -974,9 +1036,24 @@ def generate_report(
             f'<div class="chart-title">{os.path.basename(p)[:-4].replace("_"," ")}</div></div>'
             for p in heat_pngs
         )
+        _hm_ai_block = ""
+        if heatmap_ai_html:
+            _hm_ai_block = (
+                '<div class="ai-box" style="margin-bottom:16px">'
+                '<div style="font-size:.8rem;color:#667eea;font-weight:600;margin-bottom:6px">'
+                '&#10024; AI Heatmap Interpretation</div>'
+                + heatmap_ai_html
+                + '</div>'
+            )
         H.append(f"""
 <div class="card">
   <h2>🗺️ Summary Heatmaps</h2>
+  <p style="font-size:.85rem;color:#888;margin-bottom:12px">
+    Columns sorted by mean lift (high &rarr; low).
+    Values = weighted mean lift (pp); <strong>*</strong> = sig vs 0 at &alpha;={alpha}.
+    &#10003; in column label = sig difference across groups within that cut.
+  </p>
+  {_hm_ai_block}
   <div class="chart-grid">{items}</div>
 </div>
 """)
