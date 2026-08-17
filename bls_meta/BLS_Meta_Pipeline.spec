@@ -34,6 +34,11 @@ a = Analysis(
         'statsmodels.stats.multicomp',
         'statsmodels.stats.power',
         'statsmodels.compat',
+        # seaborn
+        'seaborn',
+        'seaborn.cm',
+        'seaborn.palettes',
+        'seaborn.utils',
         # PIL
         'PIL',
         'PIL.Image',

@@ -26,7 +26,7 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install pyinstaller pandas numpy scipy scikit-learn statsmodels matplotlib pillow pyyaml openpyxl
+          pip install pyinstaller pandas numpy scipy scikit-learn statsmodels matplotlib seaborn pillow pyyaml openpyxl
 
       - name: Build macOS app
         run: |
