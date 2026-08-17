@@ -25,6 +25,7 @@ import ast
 import yaml
 import warnings
 import textwrap
+import difflib
 
 import numpy  as np
 import pandas as pd
@@ -68,6 +69,148 @@ MT_CORRECTION         = _ANA.get("mt_correction", "none")  # none | bh | bonferr
 WINSORIZE_LO  = _PRE.get("winsorize_lower", 0.02)
 WINSORIZE_HI  = _PRE.get("winsorize_upper", 0.98)
 FREQ_P99_CAP  = _PRE.get("freq_p99_cap",    True)
+
+# ─── Column Alias + Fuzzy Resolver ───────────────────────────────────────────
+# Maps canonical column name → list of known alternative names.
+# If none match exactly, falls back to difflib fuzzy matching.
+COLUMN_ALIASES: dict[str, list[str]] = {
+    "absolute_lift":             ["lift", "abs_lift", "lift_value", "brand_lift", "lift_abs"],
+    "advertising_objective":     ["objective_type", "campaign_objective", "objective",
+                                   "ad_objective", "camp_objective"],
+    "total_exposed_responses":   ["exposed_n", "exposed_count", "n_exposed",
+                                   "exposed_responses", "num_exposed"],
+    "total_control_responses":   ["control_n", "control_count", "n_control",
+                                   "control_responses", "num_control"],
+    "paid_avg_play_dur":         ["avg_play_duration", "play_dur", "watch_time",
+                                   "avg_watch_time", "avg_play_time", "paid_play_dur"],
+    "video_material_id_count":   ["creative_count", "material_count", "num_creatives",
+                                   "creative_num", "num_materials"],
+    "video_duration":            ["video_dur", "duration", "creative_duration",
+                                   "vid_duration", "clip_duration"],
+    "paid_vcr":                  ["vcr", "view_completion_rate", "video_completion_rate",
+                                   "completion_rate"],
+    "account_segment":           ["acct_segment", "account_type", "advertiser_segment",
+                                   "acct_type"],
+    "bid_type":                  ["billing_type", "bid_method", "billing_method",
+                                   "campaign_bid_type"],
+    "if_aco":                    ["aco", "is_aco", "aco_flag", "aco_enabled"],
+    "if_aeo":                    ["aeo", "is_aeo", "aeo_flag", "aeo_enabled"],
+    "is_significant":            ["significant", "is_sig", "significance",
+                                   "sig_flag", "is_significant_flag"],
+    "reach":                     ["unique_reach", "total_reach", "audience_reach"],
+    "avg_weekly_frequency":      ["frequency", "weekly_frequency", "avg_frequency",
+                                   "freq", "avg_freq"],
+    "survey_end_time":           ["end_time", "survey_end", "end_date", "survey_end_date"],
+    "survey_start_time":         ["start_time", "survey_start", "start_date", "survey_start_date"],
+    "l1_product_tag":            ["product_tag", "l1_tag", "l1_product", "l1_cat"],
+    "l3_product_tag":            ["l3_tag", "l3_product", "l3_cat"],
+    "spark_type":                ["spark_ads_type", "spark_category", "spark_cat_type"],
+    "spark_cat":                 ["spark_category", "spark_ads_cat"],
+}
+
+_FUZZY_CUTOFF = 0.72   # difflib similarity threshold; raise to be stricter
+
+# Columns the pipeline CANNOT run without — raise clearly if absent after remapping.
+REQUIRED_COLS: frozenset = frozenset({
+    "absolute_lift",
+    "exposed_pct",
+    "control_pct",
+    "total_exposed_responses",
+    "total_control_responses",
+})
+
+
+def _resolve_col(df_cols: list[str], canonical: str,
+                 alias_map: dict = COLUMN_ALIASES,
+                 cutoff: float = _FUZZY_CUTOFF) -> tuple[str | None, str]:
+    """
+    Find the actual column in df that corresponds to `canonical`.
+
+    Priority:
+      1. Exact match on canonical name
+      2. Exact match on any known alias
+      3. difflib fuzzy match (cutoff) on all df columns
+
+    Returns (resolved_col, method) where method is one of:
+      'exact' | 'alias:<alias>' | 'fuzzy:<score>' | None
+    """
+    # 1. Exact
+    if canonical in df_cols:
+        return canonical, "exact"
+
+    # 2. Alias exact
+    for alias in alias_map.get(canonical, []):
+        if alias in df_cols:
+            return alias, f"alias:{alias}"
+
+    # 3. Fuzzy (case-insensitive)
+    lower_map = {c.lower(): c for c in df_cols}
+    candidates = list(lower_map.keys())
+    target_lower = canonical.lower()
+    # also try aliases as fuzzy targets
+    alias_lowers = [a.lower() for a in alias_map.get(canonical, [])]
+
+    best_col, best_score = None, 0.0
+    for target in [target_lower] + alias_lowers:
+        matches = difflib.get_close_matches(target, candidates, n=1, cutoff=cutoff)
+        if matches:
+            score = difflib.SequenceMatcher(None, target, matches[0]).ratio()
+            if score > best_score:
+                best_score = score
+                best_col   = lower_map[matches[0]]
+
+    if best_col:
+        return best_col, f"fuzzy:{best_score:.2f}"
+    return None, "not_found"
+
+
+def _remap_columns(df: pd.DataFrame,
+                   alias_map: dict = COLUMN_ALIASES) -> pd.DataFrame:
+    """
+    Scan df columns against COLUMN_ALIASES and rename any matched
+    non-exact columns to their canonical names.
+    Prints a summary of remappings so the user knows what happened.
+    """
+    df_cols = list(df.columns)
+    renames  = {}   # old_name -> canonical
+    skipped  = []   # canonicals that couldn't be resolved
+
+    for canonical in alias_map:
+        if canonical in df_cols:
+            continue  # already correct, no action needed
+        resolved, method = _resolve_col(df_cols, canonical, alias_map)
+        if resolved and resolved != canonical:
+            if resolved not in renames:  # avoid double-rename conflicts
+                renames[resolved] = canonical
+
+    if renames:
+        print("[ColumnResolver] Remapping columns to canonical names:")
+        for old, new in renames.items():
+            print(f"  {old!r:40s} → {new!r}")
+        df = df.rename(columns=renames)
+    else:
+        print("[ColumnResolver] All columns matched exactly — no remapping needed.")
+
+    # ── Validate required columns ────────────────────────────────────────────
+    missing_required = [c for c in REQUIRED_COLS if c not in df.columns]
+    if missing_required:
+        raise ValueError(
+            f"[ColumnResolver] REQUIRED columns missing after remapping: {missing_required}\n"
+            f"  These columns are mandatory; please check your CSV and COLUMN_ALIASES."
+        )
+
+    # ── NaN-fill missing optional columns ───────────────────────────────────
+    optional_cols = set(alias_map.keys()) - REQUIRED_COLS
+    missing_optional = sorted(c for c in optional_cols if c not in df.columns)
+    if missing_optional:
+        print(f"[ColumnResolver] {len(missing_optional)} optional column(s) not found → filling with NaN:")
+        for c in missing_optional:
+            print(f"  {c}")
+            df[c] = np.nan
+    else:
+        print("[ColumnResolver] All optional columns present.")
+
+    return df
 
 RF_N_ESTIMATORS = _FI.get("n_estimators", 300)
 RF_CV_FOLDS     = _FI.get("cv_folds",     5)
@@ -415,6 +558,9 @@ def load_and_preprocess(data_path=DATA):
     df = pd.read_csv(data_path, low_memory=False)
     print(f"  Raw shape: {df.shape}")
 
+    # ── 0. Column remapping (alias + fuzzy) ─────────────────────────────────
+    df = _remap_columns(df)
+
     # ── 1. Weights ──────────────────────────────────────────────────────────
     df["se"]        = df.apply(_compute_se, axis=1)
     df["variance"]  = df["se"] ** 2
@@ -465,19 +611,28 @@ def load_and_preprocess(data_path=DATA):
         pd.to_numeric(df["avg_weekly_frequency"], errors="coerce")
     )
     wi     = df["weekly_impressions"].dropna()
-    wi_p33 = wi.quantile(0.33)
-    wi_p67 = wi.quantile(0.67)
-    df["weekly_impr_group"] = pd.cut(
-        df["weekly_impressions"],
-        bins=[0, wi_p33, wi_p67, float("inf")],
-        labels=["Low", "Mid", "High"],
-    )
+    if len(wi) >= 3 and wi.nunique() >= 2:
+        wi_p33 = wi.quantile(0.33)
+        wi_p67 = wi.quantile(0.67)
+        df["weekly_impr_group"] = pd.cut(
+            df["weekly_impressions"],
+            bins=[0, wi_p33, wi_p67, float("inf")],
+            labels=["Low", "Mid", "High"],
+        )
+    else:
+        print("  [Warning] weekly_impressions all-NaN or constant — weekly_impr_group set to NaN")
+        df["weekly_impr_group"] = np.nan
 
     # ── 4. Frequency ────────────────────────────────────────────────────────
     freq_p99 = df["avg_weekly_frequency"].quantile(0.99) if FREQ_P99_CAP else np.inf
     df["freq_w"]      = pd.to_numeric(df["avg_weekly_frequency"], errors="coerce").clip(upper=freq_p99)
     df["freq_is_null"] = df["freq_w"].isna().astype(int)
-    df["freq_group"]   = pd.qcut(df["freq_w"], q=3, labels=["Low", "Mid", "High"], duplicates="drop")
+    _freq_valid = df["freq_w"].dropna()
+    if len(_freq_valid) >= 3 and _freq_valid.nunique() >= 2:
+        df["freq_group"] = pd.qcut(df["freq_w"], q=3, labels=["Low", "Mid", "High"], duplicates="drop")
+    else:
+        print("  [Warning] avg_weekly_frequency all-NaN or constant — freq_group set to NaN")
+        df["freq_group"] = np.nan
 
     # ── 5. Derived columns ──────────────────────────────────────────────────
     df["objective"]    = df["advertising_objective"]
@@ -489,40 +644,55 @@ def load_and_preprocess(data_path=DATA):
         df["spark_cat"] = df.get("spark_type", pd.Series(dtype=str))
 
     # ── 6. Upper-funnel filter (3-signal) ───────────────────────────────────
-    df["l1_list"]        = df["l1_product_tag"].apply(_parse_list)
-    df["obj_list_check"] = df["advertising_objective"].apply(_parse_list)
-    df["l3_list_check"]  = df["l3_product_tag"].apply(_parse_list)
+    _uf_cols = ["l1_product_tag", "advertising_objective", "l3_product_tag"]
+    _uf_missing = [c for c in _uf_cols if df[c].isna().all()]
+    if _uf_missing:
+        print(f"  [Warning] Upper-funnel filter SKIPPED — columns all-NaN: {_uf_missing}")
+        print(f"  Proceeding with all {len(df):,} rows (no funnel filter applied)")
+    else:
+        df["l1_list"]        = df["l1_product_tag"].apply(_parse_list)
+        df["obj_list_check"] = df["advertising_objective"].apply(_parse_list)
+        df["l3_list_check"]  = df["l3_product_tag"].apply(_parse_list)
 
-    df["has_upper"]     = df["l1_list"].apply(lambda ts: "Upper Funnel (Awareness)" in ts)
-    df["obj_has_upper"] = df["obj_list_check"].apply(lambda ts: any(t.strip() in _OBJ_UPPER for t in ts))
-    df["l3_has_upper"]  = df["l3_list_check"].apply(lambda ts: any(t.strip() in _L3_UPPER for t in ts))
-    df["upper_signals"] = df["has_upper"].astype(int) + df["obj_has_upper"].astype(int) + df["l3_has_upper"].astype(int)
+        df["has_upper"]     = df["l1_list"].apply(lambda ts: "Upper Funnel (Awareness)" in ts)
+        df["obj_has_upper"] = df["obj_list_check"].apply(lambda ts: any(t.strip() in _OBJ_UPPER for t in ts))
+        df["l3_has_upper"]  = df["l3_list_check"].apply(lambda ts: any(t.strip() in _L3_UPPER for t in ts))
+        df["upper_signals"] = df["has_upper"].astype(int) + df["obj_has_upper"].astype(int) + df["l3_has_upper"].astype(int)
 
-    before = len(df)
-    df = df[df["upper_signals"] == 3].reset_index(drop=True)
-    print(f"  Upper-funnel filter: {before:,} → {len(df):,} rows")
+        before = len(df)
+        df = df[df["upper_signals"] == 3].reset_index(drop=True)
+        print(f"  Upper-funnel filter: {before:,} → {len(df):,} rows")
 
     # ── 7. Explode product & objective ──────────────────────────────────────
-    df["prod_list"] = df["l3_product_tag"].apply(_parse_list)
-    df["obj_list"]  = df["advertising_objective"].apply(_parse_list)
+    if df["l3_product_tag"].notna().any():
+        df["prod_list"] = df["l3_product_tag"].apply(_parse_list)
+        df_product = df.explode("prod_list").copy()
+        df_product = df_product[
+            df_product["prod_list"].notna() &
+            (df_product["prod_list"].astype(str).str.strip() != "")
+        ].reset_index(drop=True)
+        df_product["product_split"] = (
+            df_product["prod_list"].str.strip().map(PRODUCT_MAP).fillna("App, Commerce & Other")
+        )
+    else:
+        print("  [Warning] l3_product_tag all-NaN — product split cut will be empty")
+        df_product = df.copy()
+        df_product["product_split"] = np.nan
 
-    df_product = df.explode("prod_list").copy()
-    df_product = df_product[
-        df_product["prod_list"].notna() &
-        (df_product["prod_list"].astype(str).str.strip() != "")
-    ].reset_index(drop=True)
-    df_product["product_split"] = (
-        df_product["prod_list"].str.strip().map(PRODUCT_MAP).fillna("App, Commerce & Other")
-    )
-
-    df_objective = df.explode("obj_list").copy()
-    df_objective = df_objective[
-        df_objective["obj_list"].notna() &
-        (df_objective["obj_list"].astype(str).str.strip() != "")
-    ].reset_index(drop=True)
-    df_objective["obj_group"] = (
-        df_objective["obj_list"].str.strip().map(OBJ_MAP).fillna("Other")
-    )
+    if df["advertising_objective"].notna().any():
+        df["obj_list"] = df["advertising_objective"].apply(_parse_list)
+        df_objective = df.explode("obj_list").copy()
+        df_objective = df_objective[
+            df_objective["obj_list"].notna() &
+            (df_objective["obj_list"].astype(str).str.strip() != "")
+        ].reset_index(drop=True)
+        df_objective["obj_group"] = (
+            df_objective["obj_list"].str.strip().map(OBJ_MAP).fillna("Other")
+        )
+    else:
+        print("  [Warning] advertising_objective all-NaN — objective cut will be empty")
+        df_objective = df.copy()
+        df_objective["obj_group"] = np.nan
 
     print(f"  df shape: {df.shape}")
     print(f"  df_product shape: {df_product.shape} | groups: {df_product['product_split'].value_counts().to_dict()}")

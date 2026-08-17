@@ -38,6 +38,7 @@ jobs:
             scikit-learn \
             statsmodels \
             matplotlib \
+            seaborn \
             pillow \
             pyyaml \
             openpyxl
