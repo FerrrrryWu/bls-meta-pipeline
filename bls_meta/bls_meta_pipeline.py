@@ -22,6 +22,7 @@ Config:
 import os
 import re
 import ast
+import sys
 import yaml
 import warnings
 import textwrap
@@ -40,8 +41,17 @@ from sklearn.model_selection import cross_val_score
 
 warnings.filterwarnings("ignore")
 
+# ─── Frozen / dev base directory ────────────────────────────────────────────
+# In PyInstaller frozen mode, __file__ points to the temp extraction dir (_MEIPASS),
+# NOT the directory containing the .exe.  Use sys.executable for writable paths.
+_BASE_DIR = (
+    os.path.dirname(sys.executable)
+    if getattr(sys, "frozen", False)
+    else os.path.dirname(os.path.abspath(__file__))
+)
+
 # ─── Load Config ──────────────────────────────────────────────────────────────
-_CONFIG_PATH = os.path.join(os.path.dirname(__file__), "config.yaml")
+_CONFIG_PATH = os.path.join(_BASE_DIR, "config.yaml")
 
 def _load_config(path=_CONFIG_PATH):
     if os.path.exists(path):
@@ -51,8 +61,11 @@ def _load_config(path=_CONFIG_PATH):
 
 _CFG = _load_config()
 
-DATA = _CFG.get("data", {}).get("input_path", "Meta_analysis.csv")
-OUT  = _CFG.get("data", {}).get("output_dir",  "output/")
+DATA    = _CFG.get("data", {}).get("input_path", "Meta_analysis.csv")
+_out_raw = _CFG.get("data", {}).get("output_dir", "output/")
+# Resolve relative paths against _BASE_DIR so we never try to write
+# into a read-only location (e.g. macOS app bundle).  Absolute paths pass through.
+OUT = _out_raw if os.path.isabs(_out_raw) else os.path.join(_BASE_DIR, _out_raw)
 os.makedirs(OUT, exist_ok=True)
 
 _ANA      = _CFG.get("analysis",      {})
