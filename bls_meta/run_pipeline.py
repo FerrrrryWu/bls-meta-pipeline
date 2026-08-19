@@ -12,8 +12,17 @@ import sys, os, threading, traceback, io, contextlib
 
 # -- Path setup (PyInstaller frozen vs. dev) -----------------------------------
 if getattr(sys, "frozen", False):
-    _BASE = os.path.dirname(sys.executable)   # directory next to the .exe
-    _CODE = sys._MEIPASS                       # bundled code temp dir
+    _EXE_DIR = os.path.dirname(sys.executable)   # inside .app on Mac; next to .exe on Windows
+    _CODE    = sys._MEIPASS                       # bundled code temp dir
+    if sys.platform == "darwin":
+        # Writing inside .app bundle requires special entitlements on Mac.
+        # Use ~/Library/Application Support instead — always writable.
+        import pathlib
+        _USER_DATA = pathlib.Path.home() / "Library" / "Application Support" / "BLS_Meta_Pipeline"
+        _USER_DATA.mkdir(parents=True, exist_ok=True)
+        _BASE = str(_USER_DATA)
+    else:
+        _BASE = _EXE_DIR   # Windows: write config.yaml next to the exe
 else:
     _BASE = os.path.dirname(os.path.abspath(__file__))
     _CODE = _BASE
@@ -797,8 +806,14 @@ def build_app(root: tk.Tk) -> None:
         prog.title("Pipeline Running...")
         prog.geometry("1200x660")
         prog.resizable(True, True)
-        try: prog.attributes("-topmost", True)
-        except Exception: pass
+        try:
+            prog.attributes("-topmost", True)
+            prog.lift()
+            prog.focus_force()
+            # Mac sometimes needs a second lift after the event loop settles
+            prog.after(250, lambda: (prog.lift(), prog.focus_force()))
+        except Exception:
+            pass
 
         ttk.Label(prog, text="BLS Meta-Analysis -- Pipeline Progress",
                   font=("", 11, "bold")).pack(padx=12, pady=(10, 4), anchor="w")
@@ -1021,18 +1036,32 @@ def build_app(root: tk.Tk) -> None:
     def on_apply():
         c = _collect()
         if not c["data"]["input_path"]:
+            root.lift()
             messagebox.showerror("Missing input",
-                                 "Set the input CSV in tab [1] Data Paths.")
+                                 "Set the input CSV in tab [1] Data Paths.",
+                                 parent=root)
             nb.select(0); return
         if not c["data"]["output_dir"]:
+            root.lift()
             messagebox.showerror("Missing output",
-                                 "Set the output folder in tab [1] Data Paths.")
+                                 "Set the output folder in tab [1] Data Paths.",
+                                 parent=root)
             nb.select(0); return
         if not os.path.exists(c["data"]["input_path"]):
+            root.lift()
             messagebox.showerror("File not found",
-                                 f"Input file not found:\n{c['data']['input_path']}")
+                                 f"Input file not found:\n{c['data']['input_path']}",
+                                 parent=root)
             nb.select(0); return
-        _save_cfg(c)
+        try:
+            _save_cfg(c)
+        except Exception as _e:
+            root.lift()
+            messagebox.showwarning(
+                "Config save failed",
+                f"Could not save config.yaml:\n{_e}\n\nPipeline will still run.",
+                parent=root,
+            )
         _run_pipeline(c)
 
     def on_save():
