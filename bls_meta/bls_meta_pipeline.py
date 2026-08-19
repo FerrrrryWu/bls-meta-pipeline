@@ -44,11 +44,18 @@ warnings.filterwarnings("ignore")
 # ─── Frozen / dev base directory ────────────────────────────────────────────
 # In PyInstaller frozen mode, __file__ points to the temp extraction dir (_MEIPASS),
 # NOT the directory containing the .exe.  Use sys.executable for writable paths.
-_BASE_DIR = (
-    os.path.dirname(sys.executable)
-    if getattr(sys, "frozen", False)
-    else os.path.dirname(os.path.abspath(__file__))
-)
+# On macOS, the .app bundle's Contents/MacOS/ is read-only under AppTranslocation,
+# so we use ~/Library/Application Support/BLS_Meta_Pipeline/ instead.
+if getattr(sys, "frozen", False):
+    if sys.platform == "darwin":
+        import pathlib as _pathlib
+        _user_data = _pathlib.Path.home() / "Library" / "Application Support" / "BLS_Meta_Pipeline"
+        _user_data.mkdir(parents=True, exist_ok=True)
+        _BASE_DIR = str(_user_data)
+    else:
+        _BASE_DIR = os.path.dirname(sys.executable)  # Windows: dir next to .exe
+else:
+    _BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 # ─── Load Config ──────────────────────────────────────────────────────────────
 _CONFIG_PATH = os.path.join(_BASE_DIR, "config.yaml")
@@ -66,7 +73,10 @@ _out_raw = _CFG.get("data", {}).get("output_dir", "output/")
 # Resolve relative paths against _BASE_DIR so we never try to write
 # into a read-only location (e.g. macOS app bundle).  Absolute paths pass through.
 OUT = _out_raw if os.path.isabs(_out_raw) else os.path.join(_BASE_DIR, _out_raw)
-os.makedirs(OUT, exist_ok=True)
+try:
+    os.makedirs(OUT, exist_ok=True)
+except OSError:
+    pass  # will be created in full_run(); avoids crash on read-only mounts
 
 _ANA      = _CFG.get("analysis",      {})
 _PRE      = _CFG.get("preprocessing", {})
