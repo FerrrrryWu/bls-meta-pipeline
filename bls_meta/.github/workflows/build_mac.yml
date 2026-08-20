@@ -7,6 +7,7 @@ on:
     paths:
       - '**.py'
       - '**.spec'
+      - '**/config.yaml'
       - '.github/workflows/build_mac.yml'
 
 jobs:
