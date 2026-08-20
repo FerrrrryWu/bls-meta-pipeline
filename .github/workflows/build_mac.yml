@@ -27,15 +27,13 @@ jobs:
       - name: Install dependencies
         run: |
           pip install --upgrade pip
-          pip install pyinstaller==6.21.0 pandas numpy scipy scikit-learn statsmodels matplotlib seaborn pillow pyyaml openpyxl
+          pip install pyinstaller pandas numpy scipy scikit-learn statsmodels matplotlib seaborn pillow pyyaml openpyxl
 
       - name: Build macOS app
         run: |
           cd bls_meta
-          echo "Python: $(python --version)"
-          echo "PyInstaller: $(python -m PyInstaller --version)"
-          echo "Files: $(ls *.py *.spec 2>/dev/null | tr '\n' ' ')"
-          python -m PyInstaller BLS_Meta_Pipeline_mac.spec --noconfirm
+          pyinstaller BLS_Meta_Pipeline_mac.spec --noconfirm
+          echo "Build complete."
           ls -lh dist/
 
       - name: Zip .app bundle
