@@ -32,7 +32,7 @@ jobs:
       - name: Build macOS app
         run: |
           cd bls_meta
-          pyinstaller BLS_Meta_Pipeline_mac.spec --noconfirm
+          pyinstaller BLS_Meta_Pipeline_mac.spec --noconfirm > /tmp/pyi.log 2>&1 || (cat /tmp/pyi.log && exit 1)
           echo "Build complete."
           ls -lh dist/
 
