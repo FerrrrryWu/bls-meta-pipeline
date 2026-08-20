@@ -7,6 +7,7 @@ on:
     paths:
       - 'bls_meta/**.py'
       - 'bls_meta/**.spec'
+      - 'bls_meta/config.yaml'
       - '.github/workflows/build_mac.yml'
 
 jobs:
@@ -31,6 +32,8 @@ jobs:
       - name: Build macOS app
         run: |
           cd bls_meta
+          echo "=== Files in bls_meta ==="
+          ls -la *.py *.spec *.yaml 2>/dev/null || true
           pyinstaller BLS_Meta_Pipeline_mac.spec --noconfirm
           ls -lh dist/
 
