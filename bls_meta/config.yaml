@@ -1,0 +1,77 @@
+analysis:
+  alpha: 0.2
+  min_n: 2
+  weight_col: iv_weight
+  question_tags:
+    - AWARENESS
+  mt_correction: bh
+
+preprocessing:
+  winsorize_lower: 0.05
+  winsorize_upper: 0.95
+  freq_p99_cap: true
+
+cuts:
+  Watch Time:
+    enabled: true
+    min_n: 3
+  Creative Count:
+    enabled: false
+    min_n: 5
+  Video Duration:
+    enabled: false
+    min_n: 5
+  VCR:
+    enabled: true
+    min_n: 3
+  Frequency:
+    enabled: true
+    min_n: 3
+  Weekly Impressions:
+    enabled: false
+    min_n: 5
+  Objective:
+    enabled: false
+    min_n: 5
+  Product Split:
+    enabled: false
+    min_n: 5
+  Account Segment:
+    enabled: false
+    min_n: 5
+  Audience Type:
+    enabled: false
+    min_n: 5
+  Billing Type:
+    enabled: false
+    min_n: 5
+  Spark Ads:
+    enabled: false
+    min_n: 5
+  ACO:
+    enabled: false
+    min_n: 5
+
+cross_cuts:
+  enabled: true
+  min_n_multiplier: 3
+  pairs:
+    - - Watch Time
+      - VCR
+
+feature_importance:
+  enabled: true
+  n_estimators: 300
+  cv_folds: 5
+  top_n: 15
+  stratify_by_tag: true
+
+output:
+  save_figures: true
+  export_csv: true
+  export_excel: false
+  dpi: 150
+
+report:
+  enabled: true
+  ai_model: claude-haiku-4-5-20251001
