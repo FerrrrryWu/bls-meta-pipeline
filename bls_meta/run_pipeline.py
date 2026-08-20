@@ -1,4 +1,4 @@
-"""
+ï»¿"""
 BLS Meta-Analysis Pipeline -- Standalone Launcher
 ==================================================
 Entry point for the packaged .exe.
@@ -16,7 +16,7 @@ if getattr(sys, "frozen", False):
     _CODE    = sys._MEIPASS                       # bundled code temp dir
     if sys.platform == "darwin":
         # Writing inside .app bundle requires special entitlements on Mac.
-        # Use ~/Library/Application Support instead ¡ª always writable.
+        # Use ~/Library/Application Support instead â€” always writable.
         import pathlib
         _USER_DATA = pathlib.Path.home() / "Library" / "Application Support" / "BLS_Meta_Pipeline"
         _USER_DATA.mkdir(parents=True, exist_ok=True)
@@ -87,7 +87,7 @@ ALL_CUTS = [
     "Account Segment", "Audience Type", "Billing Type", "Spark Ads", "ACO",
 ]
 ALL_QUESTION_TAGS = ["AD_RECALL", "AWARENESS", "INTENT"]
-ALPHA_OPTIONS     = [0.01, 0.05, 0.10, 0.20]
+ALPHA_OPTIONS     = [0.01, 0.05, 0.10]
 WEIGHT_OPTIONS    = ["iv_weight", "n_weight"]
 DPI_OPTIONS       = [100, 150, 200, 300]
 CV_FOLD_OPTIONS       = [3, 5, 10]
@@ -204,7 +204,7 @@ def build_app(root: tk.Tk) -> None:
     v_alpha = tk.StringVar(value=str(ana.get("alpha", 0.10)))
     ttk.Combobox(f1, textvariable=v_alpha, values=[str(v) for v in ALPHA_OPTIONS],
                  width=8, state="readonly").grid(row=r, column=1, sticky="w", padx=4)
-    hint(f1, "0.01 strict  |  0.05 standard  |  0.10 lenient  |  0.20 = 80% CI", r); r += 1
+    hint(f1, "0.01 strict  |  0.05 standard  |  0.10 lenient", r); r += 1
 
     ttk.Label(f1, text="MT Correction:").grid(row=r, column=0, sticky="w", padx=8, pady=3)
     v_mt_corr = tk.StringVar(value=ana.get("mt_correction", "none"))
@@ -328,7 +328,7 @@ def build_app(root: tk.Tk) -> None:
     cc_pair_vars = {}
     r3 = 5
 
-    ttk.Label(f3, text="? Tier 1 ¡ª Recommended (default on):",
+    ttk.Label(f3, text="â­ Tier 1 â€” Recommended (default on):",
               font=("", 9, "bold")).grid(
         row=r3, column=0, columnspan=4, sticky="w", padx=8, pady=(6, 2)); r3 += 1
     for pair in TIER1_PAIRS:
@@ -338,7 +338,7 @@ def build_app(root: tk.Tk) -> None:
             row=r3, column=0, columnspan=4, sticky="w", padx=20, pady=1)
         cc_pair_vars[pair_str] = v_pair; r3 += 1
 
-    ttk.Label(f3, text="¡ò Tier 2 ¡ª Optional (default off):",
+    ttk.Label(f3, text="â—Ž Tier 2 â€” Optional (default off):",
               font=("", 9, "bold")).grid(
         row=r3, column=0, columnspan=4, sticky="w", padx=8, pady=(10, 2)); r3 += 1
     for pair in TIER2_PAIRS:
@@ -409,8 +409,8 @@ def build_app(root: tk.Tk) -> None:
                     variable=v_rpt_en).grid(
         row=r4, column=0, columnspan=3, sticky="w", padx=8, pady=3); r4 += 1
 
-    # ©¤©¤ AI provider & model auto-detect ©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤©¤
-    # Key prefix ¡ú (provider_label, default_model)
+    # â”€â”€ AI provider & model auto-detect â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
+    # Key prefix â†’ (provider_label, default_model)
     _KEY_PROFILES = {
         "AIza":        ("Gemini",    "gemini-2.0-flash"),
         "sk-ant":      ("Anthropic", "claude-haiku-4-5"),
@@ -465,14 +465,14 @@ def build_app(root: tk.Tk) -> None:
     ai_key_entry.grid(row=r4, column=2, columnspan=2, sticky="ew", padx=4)
     def _toggle_key():
         ai_key_entry.config(show="" if ai_key_entry.cget("show") == "*" else "*")
-    ttk.Button(f4, text="??", width=3, command=_toggle_key).grid(row=r4, column=3, padx=2); r4 += 1
+    ttk.Button(f4, text="ðŸ‘", width=3, command=_toggle_key).grid(row=r4, column=3, padx=2); r4 += 1
 
     # Auto-detect hint label (green = detected, orange = warning, blank = ok)
     _key_hint_var = tk.StringVar(value="")
     _key_hint_lbl = ttk.Label(f4, textvariable=_key_hint_var, font=("TkDefaultFont", 8))
     _key_hint_lbl.grid(row=r4, column=1, columnspan=3, sticky="w", padx=4); r4 += 1
 
-    # AI Model row (editable combobox ¡ª auto-filled, user can override)
+    # AI Model row (editable combobox â€” auto-filled, user can override)
     ttk.Label(f4, text="AI Model:").grid(row=r4, column=0, sticky="w", padx=8, pady=3)
     _model_cb = ttk.Combobox(f4, textvariable=v_ai_model, values=_MODEL_OPTIONS,
                               width=32, state="normal")
@@ -504,11 +504,11 @@ def build_app(root: tk.Tk) -> None:
             if not any(kw in current.lower() for kw in kws):
                 v_ai_model.set(default_model)
             link = _KEY_HINT_LINKS.get(provider, "")
-            _key_hint_var.set(f"? {provider} key  ¡ú  {v_ai_model.get()}  |  {link}")
+            _key_hint_var.set(f"âœ“ {provider} key  â†’  {v_ai_model.get()}  |  {link}")
             _key_hint_lbl.config(foreground="#16a34a")
         else:
-            # Unknown prefix ¡ª treat as OpenAI-compatible, don't change model
-            _key_hint_var.set("? Unknown key format ¡ª routing to OpenAI-compatible endpoint")
+            # Unknown prefix â€” treat as OpenAI-compatible, don't change model
+            _key_hint_var.set("âš  Unknown key format â€” routing to OpenAI-compatible endpoint")
             _key_hint_lbl.config(foreground="#e65100")
 
     v_ai_key.trace_add("write", _update_key_hint)
@@ -518,7 +518,7 @@ def build_app(root: tk.Tk) -> None:
 
     ttk.Label(
         f4,
-        text="Free keys: Gemini ¡ú aistudio.google.com   Groq ¡ú console.groq.com",
+        text="Free keys: Gemini â†’ aistudio.google.com   Groq â†’ console.groq.com",
         foreground="#777",
     ).grid(row=r4, column=0, columnspan=4, sticky="w", padx=8); r4 += 1
 
@@ -575,7 +575,7 @@ def build_app(root: tk.Tk) -> None:
                        for p in cfg.get("cross_cuts", {}).get("pairs", [])}
         row_cc = 0
         ttk.Label(custom_cc_container,
-                  text="?? Custom ¡Á Standard Cuts:",
+                  text="ðŸ”§ Custom Ã— Standard Cuts:",
                   font=("", 9, "bold")).grid(
             row=row_cc, column=0, columnspan=4,
             sticky="w", padx=8, pady=(10, 2))
@@ -684,7 +684,7 @@ def build_app(root: tk.Tk) -> None:
             elif bin_type == "fixed":
                 try:
                     bins_val = [float(x.strip()) for x in v_bins_str.get().split(",")]
-                    if len(bins_val) < 2: err_var.set("Need ¡Ý2 bin edges."); return
+                    if len(bins_val) < 2: err_var.set("Need â‰¥2 bin edges."); return
                 except ValueError:
                     err_var.set("Bin edges must be numbers."); return
                 cut_def["bins"] = bins_val
@@ -693,7 +693,7 @@ def build_app(root: tk.Tk) -> None:
                     lbls = [s.strip() for s in lbl_str.split(",")]
                     expected = len(bins_val) - 1
                     if len(lbls) != expected:
-                        err_var.set(f"Labels ({len(lbls)}) must equal bins¨C1 ({expected})."); return
+                        err_var.set(f"Labels ({len(lbls)}) must equal binsâ€“1 ({expected})."); return
                     cut_def["labels"] = lbls
             custom_cuts_data.append(cut_def)
             _refresh_tree(); _rebuild_custom_cc(); dlg.destroy()
@@ -718,7 +718,7 @@ def build_app(root: tk.Tk) -> None:
     btn6_bar = ttk.Frame(f6)
     btn6_bar.grid(row=3, column=0, columnspan=5, sticky="w", padx=8, pady=4)
     ttk.Button(btn6_bar, text="+ Add Cut",        command=_add_cut_dialog).pack(side="left", padx=4)
-    ttk.Button(btn6_bar, text="? Remove Selected", command=_remove_cut).pack(side="left",  padx=4)
+    ttk.Button(btn6_bar, text="âœ• Remove Selected", command=_remove_cut).pack(side="left",  padx=4)
     ttk.Label(
         f6,
         text="Column must exist in the input CSV.  "
@@ -943,7 +943,7 @@ def build_app(root: tk.Tk) -> None:
         _report_path = [None]
         ttk.Label(bottom, textvariable=status_var).pack(side="left", padx=4)
         btn_open_report = ttk.Button(
-            bottom, text="?? Open Report", state="disabled",
+            bottom, text="ðŸ“„ Open Report", state="disabled",
             command=lambda: webbrowser.open(
                 "file:///" + _report_path[0].replace("\\", "/")))
         btn_open_report.pack(side="right", padx=4)
@@ -1083,4 +1083,3 @@ if __name__ == "__main__":
     root = tk.Tk()
     build_app(root)
     root.mainloop()
-
