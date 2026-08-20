@@ -11,6 +11,7 @@ a = Analysis(
         ('bls_meta_pipeline.py',  '.'),
         ('config_ui.py',          '.'),
         ('report_generator.py',   '.'),
+        ('config.yaml',           '.'),
     ],
     hiddenimports=[
         # sklearn

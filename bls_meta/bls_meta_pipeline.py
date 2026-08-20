@@ -826,7 +826,9 @@ def meta_analyze(df_sub, cut_col, question_tags=None, label="Analysis",
                         if (denom > 0 and len(gdf) >= 2) else np.nan)
             ci       = z_ci * w_se if not np.isnan(w_se) else np.nan
 
-            z_stat    = wm / w_se if (not np.isnan(w_se) and w_se > 0) else np.nan
+            n_eff     = (w_sum ** 2 / w_sum_sq) if w_sum_sq > 0 else float(len(gdf))
+            se_mean   = (w_se / np.sqrt(n_eff)) if not np.isnan(w_se) else np.nan
+            z_stat    = wm / se_mean if (not np.isnan(se_mean) and se_mean > 0) else np.nan
             p_vs_zero = (float(2 * (1 - scipy_norm.cdf(abs(z_stat))))
                          if not np.isnan(z_stat) else np.nan)
 
