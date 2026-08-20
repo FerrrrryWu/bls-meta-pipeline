@@ -822,6 +822,7 @@ def generate_report(
     # ── Summary text ───────────────────────────────────────────────
     ai_notice  = ""   # optional warning banner above summary
     ai_result  = None
+    heatmap_ai_html = ""  # populated only when AI key is provided
 
     # dict: cut_name -> "insight sentence" (populated by per-cut AI call)
     per_cut_insights: dict = {}

@@ -138,9 +138,9 @@ def _notebook_ui(cfg: dict, config_path: str, on_run) -> dict:
         )
 
     # ── Tab 1: Analysis + Preprocessing ─────────────────────────────────────
-    w_alpha = w.Dropdown(
-        options=[(str(v), v) for v in ALPHA_OPTIONS],
+    w_alpha = w.BoundedFloatText(
         value=ana.get("alpha", 0.10),
+        min=0.001, max=0.999, step=0.01,
         description="Alpha:", style=lbl_style, layout=W(width="200px"),
     )
     w_mt_corr = w.Dropdown(
@@ -522,8 +522,8 @@ def _tkinter_ui(cfg: dict, config_path: str, on_run) -> dict:
     v_alpha = tk.StringVar(value=str(ana.get("alpha", 0.10)))
     ttk.Combobox(f1, textvariable=v_alpha,
                  values=[str(v) for v in ALPHA_OPTIONS],
-                 width=8, state="readonly").grid(row=r, column=1, sticky="w", padx=4)
-    hint(f1, "0.01 strict  |  0.05 standard  |  0.10 lenient", r); r += 1
+                 width=8, state="normal").grid(row=r, column=1, sticky="w", padx=4)
+    hint(f1, "0.01 strict  |  0.05 standard  |  0.10 lenient  (或手动输入)", r); r += 1
 
     ttk.Label(f1, text="MT Correction:").grid(row=r, column=0, sticky="w", padx=8, pady=3)
     v_mt_corr = tk.StringVar(value=ana.get("mt_correction", "none"))
@@ -735,7 +735,14 @@ def _tkinter_ui(cfg: dict, config_path: str, on_run) -> dict:
         c.setdefault("feature_importance", {})
         c.setdefault("output",             {})
 
-        c["analysis"]["alpha"]          = float(v_alpha.get())
+        try:
+            _alpha_val = float(v_alpha.get())
+            if not (0 < _alpha_val < 1):
+                raise ValueError
+            c["analysis"]["alpha"] = _alpha_val
+        except ValueError:
+            messagebox.showerror("Invalid Alpha", "Alpha must be a number between 0 and 1 (e.g. 0.05)")
+            return
         c["analysis"]["weight_col"]     = v_weight.get()
         c["analysis"]["min_n"]          = v_min_n.get()
         c["analysis"]["question_tags"]  = [qt for qt, v in qt_vars.items() if v.get()]
