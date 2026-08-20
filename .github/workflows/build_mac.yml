@@ -33,8 +33,8 @@ jobs:
         run: |
           cd bls_meta
           echo "=== Files in bls_meta ==="
-          ls -la *.py *.spec *.yaml 2>/dev/null || true
-          pyinstaller BLS_Meta_Pipeline_mac.spec --noconfirm
+          ls -la *.py *.spec 2>/dev/null || true
+          python -m PyInstaller BLS_Meta_Pipeline_mac.spec --noconfirm
           ls -lh dist/
 
       - name: Zip .app bundle
