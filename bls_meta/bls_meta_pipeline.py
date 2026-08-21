@@ -136,11 +136,10 @@ _FUZZY_CUTOFF = 0.72   # difflib similarity threshold; raise to be stricter
 # Columns the pipeline CANNOT run without — raise clearly if absent after remapping.
 REQUIRED_COLS: frozenset = frozenset({
     "absolute_lift",
-    "exposed_pct",
-    "control_pct",
     "total_exposed_responses",
     "total_control_responses",
 })
+# exposed_pct / control_pct are optional: SE falls back to NaN when absent
 
 
 def _resolve_col(df_cols: list[str], canonical: str,
